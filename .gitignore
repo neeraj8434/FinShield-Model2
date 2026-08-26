@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model checkpoints
+checkpoints/*.pt
+checkpoints/*.pth
+checkpoints/*.pth.tar
+
+# Test videos / datasets
+test_videos/*
+!test_videos/README.md
+
+datasets/
+data/
+*.mp4
+*.avi
+*.mov
+
+# Logs / outputs
+logs/
+outputs/
+runs/
+
+# IDE
+.vscode/
+.idea/
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# Secrets / environment variables
+.env
+.env.*
+!.env.example
