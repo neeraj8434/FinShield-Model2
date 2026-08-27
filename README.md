@@ -21,27 +21,29 @@ Model 2 analyzes a video by extracting facial frames, generating spatial feature
                 20 Face Frames
                   112 × 112 RGB
                          │
-                         ▼
-                 ResNeXt-50 32×4d
-                         │
-                         ▼
-             2048-D Feature / Frame
-                         │
-                         ▼
-                       LSTM
-                  Hidden Size 2048
-                         │
-                         ▼
-                      ReLU
-                         │
-                         ▼
-                   Dropout 0.4
-                         │
-                         ▼
-                  Linear Layer
-                         │
-                         ▼
-                    REAL / FAKE
+        ┌────────────────┴────────────────┐
+        ▼                                 ▼
+ ResNeXt-50 32×4d                Lightweight Frequency
+ (Spatial-Temporal Branch)       Analysis (2D DCT)
+        │                                 │
+        ▼                                 ▼
+ 2048-D Feature / Frame         High-Freq Energy Score
+        │                                 │
+        ▼                                 │
+       LSTM                               │
+ Hidden Size 2048                         │
+        │                                 │
+        ▼                                 │
+      ReLU                                │
+        │                                 │
+        ▼                                 │
+    Dropout 0.4                           │
+        │                                 │
+        ▼                                 │
+   Linear Layer                           │
+        │                                 │
+        ▼                                 ▼
+   REAL / FAKE                     ANOMALY SCORE
 
 Current Status
 Completed
@@ -60,6 +62,8 @@ Completed
  Test video added
  OpenCV installed
  Test video successfully read with OpenCV
+ Integrated lightweight 2D DCT frequency analysis module
+ Verified forward pass of the combined dual-branch architecture
 Current Blocker
 Face preprocessing is the only incomplete part of the pipeline.
 The original repository uses face-recognition/dlib, but dlib failed to compile on the current Mac environment.
@@ -76,7 +80,8 @@ FinShield-Model2/
 │   └── FinShield_Model2_Progress_Document.docx
 │
 ├── src/
-│   └── model2_reference.py
+│   ├── model2_reference.py
+│   └── frequency_feature.py
 │
 ├── test_videos/
 │   └── README.md
@@ -86,7 +91,8 @@ FinShield-Model2/
 │
 ├── .gitignore
 ├── README.md
-└── requirements.txt
+├── requirements.txt
+└── run_test.py
 
 Model
 
@@ -96,11 +102,12 @@ model_87_acc_20_frames_final_data.pt
 It expects:
 20 frames per video
 RGB face crops
-112 × 112 resolution
+112 × 112 resolution (or 224 × 224 for testing)
 ResNeXt-50 32×4d feature extraction
 2048-dimensional features
 LSTM temporal modeling
-2-class output: Real / Fake
+Parallel Lightweight Frequency Feature extraction (DCT-based)
+Output: 2-class logits (Real / Fake) and Frequency Anomaly Score
 
 LSTM Configuration
 input_size  = 2048
