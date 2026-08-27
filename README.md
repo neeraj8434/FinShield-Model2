@@ -116,3 +116,67 @@ ReLU
 Dropout(0.4)
 ↓
 Linear(2048 → 2)
+---
+
+## Feature D — Confidence and Diagnostic Output
+
+`src/model2_reference.py` now includes `predict_with_diagnostics(model, frames)`. It returns the final label, confidence, temporal inconsistency score, and frequency-domain score.
+
+Example:
+
+```python
+from src.model2_reference import Model, predict_with_diagnostics
+
+model = Model(num_classes=2)
+# load checkpoint here, then pass a preprocessed tensor shaped (20, 3, 112, 112)
+result = predict_with_diagnostics(model, frames)
+print(result)
+```
+
+Example output shape:
+
+```json
+{
+  "prediction": "FAKE",
+  "confidence": 0.94,
+  "temporal_score": 0.81,
+  "frequency_score": 0.76,
+  "fake_probability": 0.94
+}
+```
+
+Diagnostic behavior:
+
+- `temporal_score` measures frame-to-frame feature instability using cosine distance over the extracted ResNeXt feature sequence.
+- `frequency_score` measures high-frequency energy from the frame FFT spectrum.
+- The baseline model output is preserved; diagnostic-adjusted variants can be enabled through the prediction/evaluation flags.
+
+## Feature E — Evaluation
+
+`src/model2_reference.py` now includes `evaluate_model(...)` and `compare_model_variants(...)` for labeled datasets where labels are encoded as `0=REAL` and `1=FAKE`.
+
+```python
+from src.model2_reference import compare_model_variants
+
+results = compare_model_variants(model, dataloader)
+for model_name, metrics in results.items():
+    print(model_name, metrics)
+```
+
+The evaluator reports:
+
+- Accuracy
+- Precision
+- Recall
+- F1-score
+- Confusion matrix
+
+Comparison table for submission:
+
+| Model | Accuracy | Precision | Recall | F1 | Notes |
+|---|---:|---:|---:|---:|---|
+| Original ResNeXt-50 + LSTM | Run `compare_model_variants` with labeled data | Run `compare_model_variants` with labeled data | Run `compare_model_variants` with labeled data | Run `compare_model_variants` with labeled data | Baseline checkpoint logits only |
+| Modified + Temporal Score | Run `compare_model_variants` with labeled data | Run `compare_model_variants` with labeled data | Run `compare_model_variants` with labeled data | Run `compare_model_variants` with labeled data | Blends baseline fake probability with temporal inconsistency score |
+| Modified + Temporal + Frequency | Run `compare_model_variants` with labeled data | Run `compare_model_variants` with labeled data | Run `compare_model_variants` with labeled data | Run `compare_model_variants` with labeled data | Blends baseline fake probability with temporal and frequency scores |
+
+Actual metric values are not filled in this repository because no labeled evaluation dataset or dataloader is included in the current project files.
