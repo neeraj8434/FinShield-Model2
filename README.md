@@ -123,3 +123,71 @@ ReLU
 Dropout(0.4)
 ↓
 Linear(2048 → 2)
+---
+
+## Feature D - Confidence and Diagnostic Output
+
+`src/model2_reference.py` exposes `predict_with_diagnostics(model, frames)` for inference-time reporting. The input `frames` tensor should already be preprocessed for the checkpoint and shaped as `(20, 3, 112, 112)` or batched as `(batch, 20, 3, 112, 112)`.
+
+Example:
+
+```python
+from src.model2_reference import Model, predict_with_diagnostics
+
+model = Model(num_classes=2, use_frequency_feature=True)
+# Load checkpoint weights before inference.
+result = predict_with_diagnostics(model, frames)
+print(result)
+```
+
+Output format:
+
+```json
+{
+  "prediction": "FAKE",
+  "confidence": 0.94,
+  "probability": 0.94,
+  "temporal_score": 0.81,
+  "frequency_score": 0.76
+}
+```
+
+Implementation notes:
+
+- `prediction` is reported as `REAL` or `FAKE` using label encoding `0=REAL`, `1=FAKE`.
+- `confidence` is the probability of the selected final class.
+- `probability` is the final FAKE probability after enabled diagnostic adjustments.
+- `temporal_score` measures frame-to-frame inconsistency using cosine distance across ResNeXt sequence features.
+- `frequency_score` reuses the lightweight DCT frequency module and normalizes its energy statistic to a stable 0-1 diagnostic range.
+
+## Feature E - Evaluation
+
+`src/model2_reference.py` also exposes `evaluate_model(...)` and `compare_model_variants(...)` for labeled validation/test data. Labels must be encoded as `0=REAL` and `1=FAKE`.
+
+Example:
+
+```python
+from src.model2_reference import compare_model_variants
+
+results = compare_model_variants(model, dataloader)
+for model_name, metrics in results.items():
+    print(model_name, metrics)
+```
+
+Each evaluation result includes:
+
+- Accuracy
+- Precision
+- Recall
+- F1-score
+- Confusion matrix
+
+Submission comparison table:
+
+| Model | Accuracy | Precision | Recall | F1 | Notes |
+|---|---:|---:|---:|---:|---|
+| Original ResNeXt-50 + LSTM | Fill after running experiments | Fill after running experiments | Fill after running experiments | Fill after running experiments | Baseline checkpoint logits only |
+| Modified + Temporal Score | Fill after running experiments | Fill after running experiments | Fill after running experiments | Fill after running experiments | Baseline probability blended with temporal inconsistency score |
+| Modified + Temporal + Frequency | Fill after running experiments | Fill after running experiments | Fill after running experiments | Fill after running experiments | Baseline probability blended with temporal and frequency-domain scores |
+
+Actual metric values should be filled after running `compare_model_variants(...)` on the labeled evaluation set. The current repository does not include a labeled dataloader or test dataset, so the code provides the evaluation path without inventing unsupported results.
