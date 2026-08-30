@@ -47,4 +47,4 @@ build/
 # Secrets / environment variables
 .env
 .env.*
-!.env.example
+!.env.examplemodels/*.tflite

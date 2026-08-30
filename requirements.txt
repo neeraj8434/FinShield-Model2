@@ -1,6 +1,7 @@
 torch==2.8.0
 torchvision==0.23.0
-numpy==2.0.2
-Pillow==11.3.0
-opencv-python==5.0.0.93
+numpy==1.26.4
+Pillow==10.2.0
+opencv-python==4.10.0.84
+mediapipe==0.10.35
 jupyter
