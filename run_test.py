@@ -26,17 +26,19 @@ def main():
     print(f"Mock input shape: {mock_input.shape}")
     print("Running forward pass (this might take a few seconds)...")
     
-    # Run the model forward pass
-    with torch.no_grad(): # No need to track gradients for testing/inference
-        fmap, logits, freq_score = model(mock_input)
+    # Run the model forward pass (default: use_fusion_classifier=True → 4-tuple)
+    with torch.no_grad():
+        fmap, logits, freq_score, temporal_score = model(mock_input)
         
     print("\n--- Output Results ---")
     print(f"Feature Map shape: {fmap.shape}")
-    print(f"Logits (Classification output) shape: {logits.shape}")
+    print(f"Logits (Fused classification output) shape: {logits.shape}")
     print(f"Logits values:\n{logits}")
     
     print(f"\nFrequency Score shape: {freq_score.shape}")
     print(f"Video-level Frequency Anomaly Scores:\n{freq_score}")
+    print(f"\nTemporal Score shape: {temporal_score.shape}")
+    print(f"Temporal Inconsistency Scores:\n{temporal_score}")
     print("----------------------")
 
 if __name__ == "__main__":

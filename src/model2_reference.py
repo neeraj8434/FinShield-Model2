@@ -48,6 +48,12 @@ class Model(nn.Module):
         self.linear1 = nn.Linear(2048, num_classes)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
 
+        # --- Fusion classifier (temporal + frequency features → logits) ---
+        self.fusion_fc1 = nn.Linear(2048 + 2, 64)
+        self.fusion_relu = nn.ReLU()
+        self.fusion_dropout = nn.Dropout(0.4)
+        self.fusion_fc2 = nn.Linear(64, num_classes)
+
     def extract_sequence_features(self, x: Tensor) -> Tuple[Tensor, Tensor]:
         batch_size, seq_length, c, h, w = x.shape
 
@@ -68,17 +74,84 @@ class Model(nn.Module):
 
         return logits
 
-    def forward(self, x: Tensor):
+    def classify_fused_features(
+        self,
+        x_pooled: Tensor,
+        temporal_score: Tensor,
+        frequency_score: Tensor,
+    ) -> Tensor:
+        """Classify using LSTM features fused with temporal and frequency scores.
+
+        Parameters
+        ----------
+        x_pooled : Tensor
+            Pooled sequence features, shape ``[batch, seq_length, 2048]``.
+        temporal_score : Tensor
+            Per-sample temporal inconsistency score, shape ``[batch]``, in [0, 1].
+        frequency_score : Tensor
+            Per-sample normalized frequency anomaly score, shape ``[batch]``, in [0, 1].
+
+        Returns
+        -------
+        Tensor
+            Classification logits, shape ``[batch, num_classes]``.
+        """
+        # Same LSTM path as the baseline
+        x_lstm, _ = self.lstm(x_pooled, None)
+        lstm_out = self.dp(self.relu(x_lstm[:, -1, :]))  # [batch, 2048]
+
+        # Concatenate diagnostic scores as extra features
+        fused = torch.cat(
+            [lstm_out, temporal_score.unsqueeze(-1), frequency_score.unsqueeze(-1)],
+            dim=-1,
+        )  # [batch, 2050]
+
+        # Fusion MLP
+        out = self.fusion_fc1(fused)
+        out = self.fusion_relu(out)
+        out = self.fusion_dropout(out)
+        logits = self.fusion_fc2(out)
+        return logits
+
+    def forward(self, x: Tensor, use_fusion_classifier: bool = True):
         freq_score = None
+        temporal_score = None
+
         if self.use_frequency_feature:
             freq_score = self.freq_feature(x)
 
         fmap, x_pooled = self.extract_sequence_features(x)
-        logits = self.classify_sequence_features(x_pooled)
 
-        if self.use_frequency_feature:
-            return fmap, logits, freq_score
-        return fmap, logits
+        if use_fusion_classifier:
+            # Compute diagnostic scores for fusion
+            temporal_score = temporal_inconsistency_score(x_pooled)
+            frequency_score_normalized = (
+                normalize_frequency_score(freq_score)
+                if freq_score is not None
+                else torch.zeros(x_pooled.shape[0], device=x_pooled.device)
+            )
+            logits = self.classify_fused_features(
+                x_pooled, temporal_score, frequency_score_normalized
+            )
+        else:
+            # Baseline-only path (backward compatible)
+            logits = self.classify_sequence_features(x_pooled)
+
+        # Return value shapes for backward compatibility:
+        #   use_fusion + use_freq  → (fmap, logits, freq_score, temporal_score)  4-tuple
+        #   use_fusion + no freq   → (fmap, logits, temporal_score)              3-tuple
+        #   no fusion  + use_freq  → (fmap, logits, freq_score)                  3-tuple
+        #   no fusion  + no freq   → (fmap, logits)                              2-tuple
+        # TODO: consider a dict return once fusion training is stable,
+        # to avoid positional-unpacking bugs from these 4 different arities.
+        if use_fusion_classifier:
+            if self.use_frequency_feature:
+                return fmap, logits, freq_score, temporal_score
+            return fmap, logits, temporal_score
+        else:
+            if self.use_frequency_feature:
+                return fmap, logits, freq_score
+            return fmap, logits
 
 
 def _as_batch(frames: Tensor) -> Tensor:
