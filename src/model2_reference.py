@@ -64,7 +64,7 @@ class Model(nn.Module):
     def classify_sequence_features(self, x_pooled: Tensor) -> Tensor:
         x_lstm, _ = self.lstm(x_pooled, None)
 
-        logits = self.dp(self.linear1(x_lstm[:, -1, :]))
+        logits = self.linear1(self.dp(self.relu(x_lstm[:, -1, :])))
 
         return logits
 
