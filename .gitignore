@@ -56,3 +56,4 @@ debug2_*.jpg
 
 # Fusion feature cache
 .fusion_cache/
+reference-repo/
