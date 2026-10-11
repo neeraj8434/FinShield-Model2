@@ -85,6 +85,7 @@ FinShield-Model2/
 │
 ├── src/
 │   ├── __init__.py
+│   ├── dataset.py
 │   ├── frequency_feature.py
 │   ├── model2_reference.py
 │   ├── pipeline.py
@@ -95,6 +96,7 @@ FinShield-Model2/
 │
 ├── .gitignore
 ├── README.md
+├── evaluate.py
 ├── predict.py
 ├── requirements.txt
 ├── run_test.py
@@ -134,9 +136,69 @@ Dropout(0.4)
 Linear(2048 → 2)
 ---
 
+## End-to-End Inference Pipeline
+
+The pipeline connects raw video decoding, face detection/cropping via BlazeFace, feature extraction, temporal LSTM modeling, lightweight frequency analysis, and diagnostic confidence estimation.
+
+### 1. Command-Line Interface (`predict.py`)
+
+Run deepfake detection directly on any video file:
+
+```bash
+# Basic inference (auto-loads default checkpoint if available)
+python predict.py path/to/video.mp4
+
+# Inference specifying custom checkpoint and hardware acceleration
+python predict.py path/to/video.mp4 --checkpoint checkpoints/model_87_acc_20_frames_final_data.pt --device cuda
+
+# Machine-readable JSON output (for API/backend integrations)
+python predict.py path/to/video.mp4 --json
+```
+
+Example formatted terminal output:
+```text
+================================================================
+        FinShield AI — Model 2: Deepfake Detection Result
+================================================================
+Video File:        data/sample.mp4
+Checkpoint:        checkpoints/model_87_acc_20_frames_final_data.pt
+Inference Device:  cpu
+----------------------------------------------------------------
+PREDICTION:        [FAKE] (FAKE)
+CONFIDENCE:        94.20%
+FAKE PROBABILITY:  0.9420
+----------------------------------------------------------------
+DIAGNOSTIC SCORES:
+  • Temporal Inconsistency:  0.8120 (frame feature jitter)
+  • Frequency Anomaly Score: 0.7630 (DCT energy ratio)
+----------------------------------------------------------------
+FACE PREPROCESSING DIAGNOSTICS:
+  • Frames Sampled:          20
+  • Faces Detected:          19 / 20
+  • Fallback Crops Used:     1 / 20
+================================================================
+```
+
+### 2. Python API
+
+```python
+from src import predict_video
+
+# Run full pipeline directly from video file
+result = predict_video(
+    video_path="path/to/video.mp4",
+    checkpoint_path="checkpoints/model_87_acc_20_frames_final_data.pt",
+    device="cpu",  # or "cuda" / "mps"
+    num_frames=20,
+)
+print(result)
+```
+
+---
+
 ## Feature D - Confidence and Diagnostic Output
 
-`src/model2_reference.py` exposes `predict_with_diagnostics(model, frames)` for inference-time reporting. The input `frames` tensor should already be preprocessed for the checkpoint and shaped as `(20, 3, 112, 112)` or batched as `(batch, 20, 3, 112, 112)`.
+`src/model2_reference.py` exposes `predict_with_diagnostics(model, frames)` for tensor-level reporting. The input `frames` tensor should already be preprocessed for the checkpoint and shaped as `(20, 3, 112, 112)` or batched as `(batch, 20, 3, 112, 112)`.
 
 Example:
 
@@ -169,29 +231,29 @@ Implementation notes:
 - `temporal_score` measures frame-to-frame inconsistency using cosine distance across ResNeXt sequence features.
 - `frequency_score` reuses the lightweight DCT frequency module and normalizes its energy statistic to a stable 0-1 diagnostic range.
 
-## Feature E - Evaluation
+---
 
-`src/model2_reference.py` also exposes `evaluate_model(...)` and `compare_model_variants(...)` for labeled validation/test data. Labels must be encoded as `0=REAL` and `1=FAKE`.
+## Feature E - Evaluation & Benchmarking
 
-Example:
+The evaluation tool in `evaluate.py` benchmarks and compares the 3 model variants on labeled datasets using `compare_model_variants()`:
+1. **Original ResNeXt-50 + LSTM**: Baseline checkpoint classification logits.
+2. **Modified + Temporal Score**: Probability blended with frame-to-frame temporal inconsistency.
+3. **Modified + Temporal + Frequency**: Probability blended with temporal and frequency-domain DCT scores.
 
-```python
-from src.model2_reference import compare_model_variants
+### Running Evaluation (`evaluate.py`)
 
-results = compare_model_variants(model, dataloader)
-for model_name, metrics in results.items():
-    print(model_name, metrics)
+```bash
+# Evaluate a directory containing REAL/ and FAKE/ video folders:
+python evaluate.py --data-dir path/to/dataset/
+
+# Evaluate using a CSV manifest (video_path, label):
+python evaluate.py --csv manifest.csv
+
+# Run pipeline validation on synthetic dataset without downloading external videos:
+python evaluate.py --demo
 ```
 
-Each evaluation result includes:
-
-- Accuracy
-- Precision
-- Recall
-- F1-score
-- Confusion matrix
-
-Submission comparison table:
+### Submission Comparison Table
 
 | Model | Accuracy | Precision | Recall | F1 | Notes |
 |---|---:|---:|---:|---:|---|
@@ -199,4 +261,6 @@ Submission comparison table:
 | Modified + Temporal Score | Fill after running experiments | Fill after running experiments | Fill after running experiments | Fill after running experiments | Baseline probability blended with temporal inconsistency score |
 | Modified + Temporal + Frequency | Fill after running experiments | Fill after running experiments | Fill after running experiments | Fill after running experiments | Baseline probability blended with temporal and frequency-domain scores |
 
-Actual metric values should be filled after running `compare_model_variants(...)` on the labeled evaluation set. The current repository does not include a labeled dataloader or test dataset, so the code provides the evaluation path without inventing unsupported results.
+> [!NOTE]
+> To populate the table above with final numbers for your submission, run `python evaluate.py --data-dir <path_to_test_dataset> --checkpoint checkpoints/model_87_acc_20_frames_final_data.pt`.
+

@@ -35,6 +35,9 @@ class TestPipeline(unittest.TestCase):
             "load_model",
             "get_default_device",
             "LightweightFrequencyFeature",
+            "VideoEvaluationDataset",
+            "SyntheticEvaluationDataset",
+            "create_evaluation_dataloader",
         ]
         for sym in expected_symbols:
             self.assertTrue(hasattr(src, sym), f"Missing symbol in src: {sym}")
@@ -144,6 +147,31 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("--checkpoint", proc.stdout)
         self.assertIn("--json", proc.stdout)
 
+    def test_synthetic_dataset(self):
+        """Verify SyntheticEvaluationDataset produces expected shapes and labels."""
+        from src.dataset import SyntheticEvaluationDataset, create_evaluation_dataloader
+
+        ds = SyntheticEvaluationDataset(num_samples=4, num_frames=10, face_size=64)
+        self.assertEqual(len(ds), 4)
+        frames, label = ds[0]
+        self.assertEqual(frames.shape, (10, 3, 64, 64))
+        self.assertIn(label.item(), [0, 1])
+
+        loader = create_evaluation_dataloader(ds, batch_size=2)
+        batch_frames, batch_labels = next(iter(loader))
+        self.assertEqual(batch_frames.shape, (2, 10, 3, 64, 64))
+        self.assertEqual(batch_labels.shape, (2,))
+
+    def test_evaluate_cli_help(self):
+        """Verify evaluate.py responds to --help."""
+        cmd = [sys.executable, "evaluate.py", "--help"]
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("FinShield AI", proc.stdout)
+        self.assertIn("--demo", proc.stdout)
+        self.assertIn("--data-dir", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
+

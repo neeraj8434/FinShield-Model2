@@ -1,5 +1,10 @@
 """FinShield AI — Model 2: Deepfake Detection Package."""
 
+from .dataset import (
+    SyntheticEvaluationDataset,
+    VideoEvaluationDataset,
+    create_evaluation_dataloader,
+)
 from .frequency_feature import LightweightFrequencyFeature
 from .model2_reference import (
     LABELS,
@@ -37,4 +42,7 @@ __all__ = [
     "load_model",
     "predict_video",
     "predict_batch",
+    "VideoEvaluationDataset",
+    "SyntheticEvaluationDataset",
+    "create_evaluation_dataloader",
 ]
