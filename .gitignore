@@ -26,9 +26,6 @@ test_videos/*
 
 datasets/
 data/
-*.mp4
-*.avi
-*.mov
 
 # Logs / outputs
 logs/
@@ -48,5 +45,14 @@ build/
 .env
 .env.*
 !.env.example
+
+# BlazeFace model (binary, downloaded separately)
 models/*.tflite
 
+# Debug outputs
+debug_*/
+debug*.jpg
+debug2_*.jpg
+
+# Fusion feature cache
+.fusion_cache/

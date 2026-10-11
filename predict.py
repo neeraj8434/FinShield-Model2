@@ -6,6 +6,7 @@ Run deepfake detection directly on a video file from the command line:
     python predict.py path/to/video.mp4
     python predict.py path/to/video.mp4 --checkpoint checkpoints/model_87_acc_20_frames_final_data.pt
     python predict.py path/to/video.mp4 --json
+    python predict.py path/to/video.mp4 --fusion-checkpoint checkpoints/model_fusion_v1.pt
 """
 
 import argparse
@@ -38,6 +39,14 @@ def parse_args() -> argparse.Namespace:
         help="Path to the trained PyTorch checkpoint (.pt)",
     )
     parser.add_argument(
+        "--fusion-checkpoint",
+        type=str,
+        default=None,
+        help="Path to a trained fusion head checkpoint (.pt). When provided, "
+             "the prediction uses the learned fusion classifier instead of "
+             "post-hoc score blending.",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default=None,
@@ -61,6 +70,19 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.3,
         help="Minimum confidence threshold for BlazeFace face detection",
+    )
+    parser.add_argument(
+        "--face-model",
+        type=str,
+        default=None,
+        help="Path to a BlazeFace TFLite model file override (e.g. full-range model). "
+             "Defaults to models/blaze_face_short_range.tflite.",
+    )
+    parser.add_argument(
+        "--debug-dir",
+        type=str,
+        default=None,
+        help="Directory to save per-frame debug overlays (boxes + crops)",
     )
     parser.add_argument(
         "--no-temporal",
@@ -92,6 +114,9 @@ def print_formatted_summary(res: dict, device_str: str, ckpt_str: str) -> None:
     pred = res["prediction"]
     pred_tag = f"[{pred}]"
     conf_pct = f"{res['confidence'] * 100:.2f}%"
+    mode = res.get("mode", "baseline+blend")
+    reliable = res.get("reliable", True)
+    warning = res.get("warning")
 
     print("\n" + sep)
     print("        FinShield AI — Model 2: Deepfake Detection Result")
@@ -99,13 +124,22 @@ def print_formatted_summary(res: dict, device_str: str, ckpt_str: str) -> None:
     print(f"Video File:        {res['video_path']}")
     print(f"Checkpoint:        {ckpt_str}")
     print(f"Inference Device:  {device_str}")
+    print(f"Mode:              {mode}")
+    if not reliable and warning:
+        print(line)
+        print(f"⚠️  WARNING:        {warning}")
     print(line)
-    print(f"PREDICTION:        {pred_tag} ({pred})")
+    if not reliable:
+        print("PREDICTION:        INCONCLUSIVE (low face coverage)")
+    else:
+        print(f"PREDICTION:        {pred}")
     print(f"CONFIDENCE:        {conf_pct}")
     print(f"FAKE PROBABILITY:  {res['probability']:.4f}")
     print(line)
     print("DIAGNOSTIC SCORES:")
-    print(f"  • Temporal Inconsistency:  {res['temporal_score']:.4f} (frame feature jitter)")
+    print(f"  • Temporal Score (MAD):    {res['temporal_score']:.4f} (frame feature jitter)")
+    if res.get("temporal_cosine_score") is not None:
+        print(f"  • Temporal Cosine Score:   {res['temporal_cosine_score']:.4f} (cosine distance)")
     print(f"  • Frequency Anomaly Score: {res['frequency_score']:.4f} (DCT energy ratio)")
     print(line)
     pre = res["preprocessing"]
@@ -126,7 +160,11 @@ def main() -> None:
     device = args.device or str(get_default_device())
 
     try:
-        model = load_model(checkpoint_path=args.checkpoint, device=device)
+        model = load_model(
+            checkpoint_path=args.checkpoint,
+            device=device,
+            fusion_checkpoint_path=args.fusion_checkpoint,
+        )
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -141,6 +179,9 @@ def main() -> None:
             min_detection_confidence=args.min_conf,
             use_temporal_adjustment=not args.no_temporal,
             use_frequency_adjustment=not args.no_freq,
+            fusion_checkpoint_path=args.fusion_checkpoint,
+            face_model_path=args.face_model,
+            debug_dir=args.debug_dir,
         )
     except Exception as e:
         print(f"Inference failed with error: {e}", file=sys.stderr)

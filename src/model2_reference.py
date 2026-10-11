@@ -30,7 +30,7 @@ class Model(nn.Module):
         if self.use_frequency_feature:
             self.freq_feature = LightweightFrequencyFeature(high_freq_threshold=0.5)
 
-        model = models.resnext50_32x4d(pretrained=True)
+        model = models.resnext50_32x4d(weights=None)
 
         self.model = nn.Sequential(*list(model.children())[:-2])
 
@@ -113,7 +113,7 @@ class Model(nn.Module):
         logits = self.fusion_fc2(out)
         return logits
 
-    def forward(self, x: Tensor, use_fusion_classifier: bool = True):
+    def forward(self, x: Tensor, use_fusion_classifier: bool = False):
         freq_score = None
         temporal_score = None
 
@@ -124,7 +124,7 @@ class Model(nn.Module):
 
         if use_fusion_classifier:
             # Compute diagnostic scores for fusion
-            temporal_score = temporal_inconsistency_score(x_pooled)
+            temporal_score = temporal_mad_score(x_pooled)
             frequency_score_normalized = (
                 normalize_frequency_score(freq_score)
                 if freq_score is not None
@@ -171,8 +171,12 @@ def _fake_probability_from_logits(logits: Tensor) -> Tensor:
     return torch.softmax(logits, dim=-1)[:, 1]
 
 
-def temporal_inconsistency_score(sequence_features: Tensor) -> Tensor:
-    """Return a 0-1 score for frame-to-frame feature inconsistency."""
+def temporal_cosine_score(sequence_features: Tensor) -> Tensor:
+    """Return a 0-1 score for frame-to-frame feature inconsistency (cosine).
+
+    Uses cosine distance between consecutive frame features.
+    Output range: [0, 1] (0 = identical frames, 1 = maximally different).
+    """
     if sequence_features.shape[1] < 2:
         return torch.zeros(sequence_features.shape[0], device=sequence_features.device)
 
@@ -182,8 +186,40 @@ def temporal_inconsistency_score(sequence_features: Tensor) -> Tensor:
     return cosine_distance.mean(dim=1).clamp(0.0, 1.0)
 
 
+# Keep the old name as an alias for backward compatibility.
+temporal_inconsistency_score = temporal_cosine_score
+
+
+def temporal_mad_score(sequence_features: Tensor) -> Tensor:
+    """Mean absolute difference between consecutive frame features.
+
+    This is the primary temporal score used for diagnostics and fusion input.
+    Unlike ``temporal_cosine_score`` (bounded to [0, 1]), the MAD score is
+    **unbounded** — its magnitude depends on the feature scale.  Use
+    ``normalize_temporal_score`` when a [0, 1] value is needed (e.g. for
+    the probability blend).
+
+    Output range: [0, +∞).
+    """
+    if sequence_features.shape[1] < 2:
+        return torch.zeros(sequence_features.shape[0], device=sequence_features.device)
+    return torch.abs(sequence_features[:, 1:] - sequence_features[:, :-1]).mean(dim=(1, 2))
+
+
+def normalize_temporal_score(score: Tensor) -> Tensor:
+    """Map an unbounded temporal score to [0, 1] via ``x / (x + 1)``.
+
+    Suitable for ``temporal_mad_score`` output before blending with probabilities.
+    """
+    score = score.float().clamp_min(0.0)
+    return (score / (score + 1.0)).clamp(0.0, 1.0)
+
+
 def normalize_frequency_score(frequency_score: Tensor) -> Tensor:
-    """Map the DCT energy statistic to a stable 0-1 diagnostic score."""
+    """Map the DCT energy statistic to a stable 0-1 diagnostic score.
+
+    Uses ``x / (x + 1)`` mapping.  Output range: [0, 1].
+    """
     frequency_score = frequency_score.float().clamp_min(0.0)
     return (frequency_score / (frequency_score + 1.0)).clamp(0.0, 1.0)
 
@@ -195,7 +231,12 @@ def adjusted_fake_probability(
     temporal_weight: float = 0.15,
     frequency_weight: float = 0.10,
 ) -> Tensor:
-    """Blend classifier probability with optional diagnostic scores."""
+    """Blend classifier probability with optional diagnostic scores.
+
+    Both ``temporal_score`` and ``frequency_score`` must already be
+    normalised to [0, 1] before calling (use ``normalize_temporal_score``
+    or ``normalize_frequency_score`` as appropriate).
+    """
     probability = model_fake_probability
     if temporal_score is not None:
         probability = probability * (1.0 - temporal_weight) + temporal_score * temporal_weight
@@ -228,7 +269,10 @@ def predict_with_diagnostics(
 
     _, sequence_features = model.extract_sequence_features(frames)
     logits = model.classify_sequence_features(sequence_features)
-    temporal_score = temporal_inconsistency_score(sequence_features)
+
+    # Temporal scores — MAD is the primary diagnostic; cosine is extra.
+    ts_mad = temporal_mad_score(sequence_features)
+    ts_cosine = temporal_cosine_score(sequence_features)
 
     if model.use_frequency_feature:
         raw_frequency_score = model.freq_feature(frames)
@@ -239,7 +283,7 @@ def predict_with_diagnostics(
     fake_probability = _fake_probability_from_logits(logits)
     reported_fake_probability = adjusted_fake_probability(
         fake_probability,
-        temporal_score if use_temporal_adjustment else None,
+        normalize_temporal_score(ts_mad) if use_temporal_adjustment else None,
         frequency_score if use_frequency_adjustment else None,
     )
 
@@ -254,7 +298,8 @@ def predict_with_diagnostics(
         "prediction": prediction,
         "confidence": round(confidence, 4),
         "probability": round(fake_probability_value, 4),
-        "temporal_score": round(float(temporal_score[0].detach().cpu().item()), 4),
+        "temporal_score": round(float(ts_mad[0].detach().cpu().item()), 4),
+        "temporal_cosine_score": round(float(ts_cosine[0].detach().cpu().item()), 4),
         "frequency_score": round(float(frequency_score[0].detach().cpu().item()), 4),
     }
 
@@ -308,7 +353,7 @@ def evaluate_model(
         temporal_score = None
         frequency_score = None
         if use_temporal_adjustment:
-            temporal_score = temporal_inconsistency_score(sequence_features)
+            temporal_score = normalize_temporal_score(temporal_mad_score(sequence_features))
         if use_frequency_adjustment:
             if model.use_frequency_feature:
                 raw_frequency_score = model.freq_feature(frames)

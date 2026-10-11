@@ -13,8 +13,11 @@ from .model2_reference import (
     compare_model_variants,
     evaluate_model,
     normalize_frequency_score,
+    normalize_temporal_score,
     predict_with_diagnostics,
+    temporal_cosine_score,
     temporal_inconsistency_score,
+    temporal_mad_score,
 )
 from .pipeline import (
     DEFAULT_CHECKPOINT_PATH,
