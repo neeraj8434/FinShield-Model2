@@ -53,7 +53,7 @@ Completed
  Jupyter installed
  PyTorch 2.8.0 installed
  TorchVision 0.23.0 installed
- Apple Silicon MPS verified
+ Apple Silicon MPS and CUDA verified
  20-frame pretrained checkpoint downloaded
  Checkpoint integrity verified
  Exact checkpoint-compatible model architecture recreated
@@ -64,10 +64,11 @@ Completed
  Test video successfully read with OpenCV
  Integrated lightweight 2D DCT frequency analysis module
  Verified forward pass of the combined dual-branch architecture
-Current Blocker
-Face preprocessing is the only incomplete part of the pipeline.
-The original repository uses face-recognition/dlib, but dlib failed to compile on the current Mac environment.
-We will therefore use a Mac-compatible face detector rather than modifying the working model/checkpoint.
+ Integrated MediaPipe BlazeFace face detection & cropping pipeline (resolving dlib compilation blocker)
+ Built end-to-end inference pipeline (`src/pipeline.py`) and CLI (`predict.py`)
+
+Current Remaining Work
+ Model evaluation benchmark experiments on labeled validation/test dataset to populate the Feature E comparison table.
 
 Project Structure
 
@@ -79,20 +80,28 @@ FinShield-Model2/
 ├── docs/
 │   └── FinShield_Model2_Progress_Document.docx
 │
+├── models/
+│   └── blaze_face_short_range.tflite
+│
 ├── src/
+│   ├── __init__.py
+│   ├── frequency_feature.py
 │   ├── model2_reference.py
-│   └── frequency_feature.py
+│   ├── pipeline.py
+│   └── video_preprocessing.py
 │
 ├── test_videos/
 │   └── README.md
 │
-├── reference-repo/
-│   └── Original reference repository
-│
 ├── .gitignore
 ├── README.md
+├── predict.py
 ├── requirements.txt
-└── run_test.py
+├── run_test.py
+├── test_end_to_end.py
+├── test_fusion_paths.py
+├── test_preprocessing.py
+└── verify_checkpoint.py
 
 Model
 
