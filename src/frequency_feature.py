@@ -47,6 +47,14 @@ class LightweightFrequencyFeature(nn.Module):
         else:
             raise ValueError(f"Expected 4D or 5D input, got {len(original_shape)}D")
 
+        # The shared video preprocessing returns ImageNet-normalised RGB crops.
+        # Restore [0, 1] RGB before grayscale conversion so DCT statistics are
+        # consistent and meaningful across training, evaluation, and inference.
+        if c == 3:
+            mean = x.new_tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+            std = x.new_tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+            x = (x * std + mean).clamp(0.0, 1.0)
+
         # 1. Convert face crop to grayscale
         if c == 3:
             # Standard RGB to Grayscale conversion
@@ -92,3 +100,42 @@ class LightweightFrequencyFeature(nn.Module):
         video_score = torch.mean(energy, dim=1)
         
         return video_score
+
+    def band_energies(self, x):
+        """Return normalized low/mid/high DCT energies per video.
+
+        Each grayscale crop is transformed with the same orthonormal DCT-II as
+        ``forward``. Radial frequency bands use normalized coordinates with
+        boundaries 0.20 and 0.50 (radius is divided by sqrt(2)); each band's
+        mean absolute coefficient energy is normalized to sum to one per frame,
+        then averaged across the sampled face frames.
+        """
+        if x.ndim == 4:
+            x = x.unsqueeze(1)
+        if x.ndim != 5:
+            raise ValueError(f"Expected 4D or 5D input, got {x.ndim}D")
+        batch_size, seq_length, channels, height, width = x.shape
+        x = x.reshape(batch_size * seq_length, channels, height, width)
+        if channels == 3:
+            mean = x.new_tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+            std = x.new_tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+            x = (x * std + mean).clamp(0.0, 1.0)
+            gray = 0.2989 * x[:, 0] + 0.5870 * x[:, 1] + 0.1140 * x[:, 2]
+        elif channels == 1:
+            gray = x[:, 0]
+        else:
+            raise ValueError(f"Expected 1 or 3 channels, got {channels}")
+        dct_h = self.get_dct_matrix(height, device=x.device, dtype=x.dtype)
+        dct_w = self.get_dct_matrix(width, device=x.device, dtype=x.dtype)
+        coeffs = torch.matmul(torch.matmul(dct_h, gray), dct_w.t()).abs()
+        fy = torch.arange(height, device=x.device, dtype=x.dtype) / max(height - 1, 1)
+        fx = torch.arange(width, device=x.device, dtype=x.dtype) / max(width - 1, 1)
+        radius = torch.sqrt(fy[:, None] ** 2 + fx[None, :] ** 2) / math.sqrt(2)
+        masks = torch.stack([radius < 0.20, (radius >= 0.20) & (radius < 0.50), radius >= 0.50])
+        energies = []
+        for mask in masks:
+            count = mask.sum().clamp_min(1)
+            energies.append((coeffs * mask.to(coeffs.dtype)).sum(dim=(1, 2)) / count)
+        frame_energies = torch.stack(energies, dim=-1)
+        frame_energies = frame_energies / frame_energies.sum(dim=-1, keepdim=True).clamp_min(1e-12)
+        return frame_energies.view(batch_size, seq_length, 3).mean(dim=1)

@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import sys
+import time
 
 from src.pipeline import (
     DEFAULT_CHECKPOINT_PATH,
@@ -63,14 +64,14 @@ def parse_args() -> argparse.Namespace:
         help="Minimum confidence threshold for BlazeFace face detection",
     )
     parser.add_argument(
-        "--no-temporal",
+        "--blend-temporal",
         action="store_true",
-        help="Disable temporal score adjustment in final probability",
+        help="Use legacy temporal score blending (inference-time ablation)",
     )
     parser.add_argument(
-        "--no-freq",
+        "--blend-frequency",
         action="store_true",
-        help="Disable frequency domain score adjustment in final probability",
+        help="Use legacy frequency score blending (inference-time ablation)",
     )
     parser.add_argument(
         "--json",
@@ -125,6 +126,10 @@ def main() -> None:
 
     device = args.device or str(get_default_device())
 
+    if not args.checkpoint:
+        print("Error: No checkpoint is included. Supply the original pretrained checkpoint with --checkpoint.", file=sys.stderr)
+        sys.exit(1)
+
     try:
         model = load_model(checkpoint_path=args.checkpoint, device=device)
     except FileNotFoundError as e:
@@ -132,6 +137,7 @@ def main() -> None:
         sys.exit(1)
 
     try:
+        inference_started = time.perf_counter()
         result = predict_video(
             video_path=args.video,
             model=model,
@@ -139,9 +145,13 @@ def main() -> None:
             num_frames=args.frames,
             face_size=args.face_size,
             min_detection_confidence=args.min_conf,
-            use_temporal_adjustment=not args.no_temporal,
-            use_frequency_adjustment=not args.no_freq,
+            use_temporal_adjustment=args.blend_temporal,
+            use_frequency_adjustment=args.blend_frequency,
         )
+        result["end_to_end_seconds"] = round(time.perf_counter() - inference_started, 6)
+        result["timing_includes_preprocessing"] = True
+        result["device"] = device
+        result["frames_requested"] = args.frames
     except Exception as e:
         print(f"Inference failed with error: {e}", file=sys.stderr)
         sys.exit(1)

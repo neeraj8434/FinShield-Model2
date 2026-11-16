@@ -9,6 +9,7 @@ Provides PyTorch Datasets for evaluating deepfake detection models on:
 from __future__ import annotations
 
 import csv
+import hashlib
 import logging
 import os
 from typing import List, Optional, Tuple, Union
@@ -45,6 +46,7 @@ class VideoEvaluationDataset(Dataset):
         face_size: int = 112,
         min_detection_confidence: float = 0.3,
         cache: bool = True,
+        disk_cache_dir: Optional[str] = None,
     ):
         """
         Parameters
@@ -65,33 +67,64 @@ class VideoEvaluationDataset(Dataset):
         self.face_size = face_size
         self.min_detection_confidence = min_detection_confidence
         self.cache = cache
+        self.disk_cache_dir = os.path.abspath(disk_cache_dir) if disk_cache_dir else None
+        if self.disk_cache_dir: os.makedirs(self.disk_cache_dir, exist_ok=True)
         self._cached_tensors: dict[int, Tensor] = {}
+        self._cached_metadata: dict[int, tuple[str, int, Optional[str]]] = {}
 
     def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
+    def __getitem__(self, idx: int):
         video_path, label = self.samples[idx]
 
         if self.cache and idx in self._cached_tensors:
             frames = self._cached_tensors[idx]
+            usable = self._cached_metadata[idx][1]
+            reason = self._cached_metadata[idx][2]
         else:
-            try:
-                res = preprocess_video(
-                    video_path=video_path,
-                    num_frames=self.num_frames,
-                    face_size=self.face_size,
-                    min_detection_confidence=self.min_detection_confidence,
-                )
-                frames = res.tensor
-            except Exception as e:
-                logger.warning("Error preprocessing %s (%s). Using fallback blank frames.", video_path, e)
-                frames = torch.zeros(self.num_frames, 3, self.face_size, self.face_size, dtype=torch.float32)
+            cache_path = None
+            if self.disk_cache_dir:
+                absolute = os.path.abspath(video_path)
+                try:
+                    stat = os.stat(absolute)
+                    cache_key = hashlib.sha256(
+                        f"{absolute}|{stat.st_size}|{stat.st_mtime_ns}|{self.num_frames}|{self.face_size}|{self.min_detection_confidence}".encode()
+                    ).hexdigest()
+                    cache_path = os.path.join(self.disk_cache_dir, f"{cache_key}.pt")
+                except OSError:
+                    pass
+            cached = torch.load(cache_path, map_location="cpu", weights_only=True) if cache_path and os.path.isfile(cache_path) else None
+            if cached is not None:
+                frames, usable, reason = cached["frames"].float(), int(cached["usable"]), cached["reason"] or ""
+            else:
+                try:
+                    res = preprocess_video(
+                        video_path=video_path,
+                        num_frames=self.num_frames,
+                        face_size=self.face_size,
+                        min_detection_confidence=self.min_detection_confidence,
+                    )
+                    usable = res.num_detected
+                    mask = res.valid_mask
+                    if mask is None:
+                        mask = torch.zeros(res.tensor.shape[0], dtype=torch.bool)
+                        mask[:usable] = True
+                    frames = res.tensor[mask] if usable >= 2 else res.tensor[:0]
+                    reason = "" if usable >= 2 else "fewer_than_two_detected_face_frames"
+                except Exception as e:
+                    logger.warning("Error preprocessing %s (%s). Marking as unscorable.", video_path, e)
+                    frames = torch.empty(0, 3, self.face_size, self.face_size, dtype=torch.float32)
+                    usable = 0
+                    reason = f"preprocessing_error:{type(e).__name__}"
+                if cache_path:
+                    torch.save({"frames": frames.half(), "usable": usable, "reason": reason}, cache_path)
 
             if self.cache:
                 self._cached_tensors[idx] = frames
+                self._cached_metadata[idx] = (video_path, usable, reason)
 
-        return frames, torch.tensor(label, dtype=torch.long)
+        return frames, torch.tensor(label, dtype=torch.long), video_path, usable, reason
 
     @classmethod
     def from_directory(
@@ -100,6 +133,7 @@ class VideoEvaluationDataset(Dataset):
         num_frames: int = 20,
         face_size: int = 112,
         cache: bool = True,
+        disk_cache_dir: Optional[str] = None,
     ) -> VideoEvaluationDataset:
         """Create dataset from a directory containing REAL/ and FAKE/ folders."""
         samples: List[Tuple[str, int]] = []
@@ -116,7 +150,7 @@ class VideoEvaluationDataset(Dataset):
         if not samples:
             raise ValueError(f"No video files found under REAL/ or FAKE/ subdirectories in: {data_dir}")
 
-        return cls(samples=samples, num_frames=num_frames, face_size=face_size, cache=cache)
+        return cls(samples=samples, num_frames=num_frames, face_size=face_size, cache=cache, disk_cache_dir=disk_cache_dir)
 
     @classmethod
     def from_csv(
@@ -126,28 +160,29 @@ class VideoEvaluationDataset(Dataset):
         face_size: int = 112,
         base_dir: Optional[str] = None,
         cache: bool = True,
+        split: str = "test",
+        disk_cache_dir: Optional[str] = None,
     ) -> VideoEvaluationDataset:
-        """Create dataset from a CSV manifest with columns: `video_path,label`."""
+        """Create dataset from CSV; if a split column exists select `split`."""
         if not os.path.isfile(csv_path):
             raise FileNotFoundError(f"Evaluation CSV manifest not found: {csv_path}")
 
         samples: List[Tuple[str, int]] = []
         with open(csv_path, mode="r", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            header = next(reader, None)
+            reader = csv.DictReader(f)
             for row in reader:
-                if len(row) < 2:
+                if "split" in row and row["split"].strip().lower() != split.lower():
                     continue
-                v_path, lbl_str = row[0].strip(), row[1].strip()
-                if base_dir and not os.path.isabs(v_path):
+                v_path, lbl_str = row.get("video_path", "").strip(), row.get("label", "").strip()
+                if base_dir and v_path and not os.path.isabs(v_path):
                     v_path = os.path.join(base_dir, v_path)
-                if lbl_str in LABEL_MAP:
+                if v_path and lbl_str in LABEL_MAP:
                     samples.append((v_path, LABEL_MAP[lbl_str]))
 
         if not samples:
             raise ValueError(f"No valid labeled video entries parsed from: {csv_path}")
 
-        return cls(samples=samples, num_frames=num_frames, face_size=face_size, cache=cache)
+        return cls(samples=samples, num_frames=num_frames, face_size=face_size, cache=cache, disk_cache_dir=disk_cache_dir)
 
 
 class SyntheticEvaluationDataset(Dataset):

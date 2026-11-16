@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import List, NamedTuple, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import cv2
 import mediapipe as mp
@@ -23,7 +24,8 @@ import torch
 from torch import Tensor
 
 
-class PreprocessResult(NamedTuple):
+@dataclass(frozen=True)
+class PreprocessResult:
     """Return type for preprocess_video().
 
     tensor : Tensor
@@ -36,6 +38,13 @@ class PreprocessResult(NamedTuple):
     tensor: Tensor
     num_detected: int
     num_fallback: int
+    valid_mask: Optional[Tensor] = None
+
+    def __iter__(self):
+        # Preserve the original public three-value unpacking API.
+        yield self.tensor
+        yield self.num_detected
+        yield self.num_fallback
 
 
 logger = logging.getLogger(__name__)
@@ -225,6 +234,7 @@ def preprocess_video(
     )
 
     crops: List[np.ndarray] = []
+    valid_frames: List[bool] = []
     last_good_crop: Optional[np.ndarray] = None
     face_detected_count = 0
     fallback_count = 0
@@ -247,6 +257,7 @@ def preprocess_video(
                         # Can't even read the frame; push a black placeholder
                         crops.append(np.zeros((face_size, face_size, 3), dtype=np.uint8))
                     fallback_count += 1
+                    valid_frames.append(False)
                     continue
 
                 rgb_frame = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
@@ -287,10 +298,12 @@ def preprocess_video(
                         else:
                             crops.append(_center_crop(rgb_frame, face_size))
                         fallback_count += 1
+                        valid_frames.append(False)
                         continue
 
                     crop = cv2.resize(crop, (face_size, face_size))
                     crops.append(crop)
+                    valid_frames.append(True)
                     last_good_crop = crop
                     face_detected_count += 1
 
@@ -320,6 +333,7 @@ def preprocess_video(
                             frame_idx, seq_idx + 1, num_frames,
                         )
                         crops.append(_center_crop(rgb_frame, face_size))
+                    valid_frames.append(False)
 
         finally:
             detector.close()
@@ -341,4 +355,4 @@ def preprocess_video(
     std = torch.tensor(_IMAGENET_STD).view(1, 3, 1, 1)
     tensor = (tensor - mean) / std
 
-    return PreprocessResult(tensor, face_detected_count, fallback_count)
+    return PreprocessResult(tensor, face_detected_count, fallback_count, torch.tensor(valid_frames, dtype=torch.bool))

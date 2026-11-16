@@ -31,7 +31,7 @@ from src.dataset import (
     VideoEvaluationDataset,
     create_evaluation_dataloader,
 )
-from src.model2_reference import compare_model_variants
+from src.model2_reference import compare_model_variants, evaluate_model
 from src.pipeline import (
     DEFAULT_CHECKPOINT_PATH,
     get_default_device,
@@ -77,9 +77,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=2,
+        default=1,
         help="Batch size for evaluation dataloader",
     )
+    parser.add_argument("--data-root", type=str, default=".", help="Root for relative video_path entries in the CSV")
+    parser.add_argument("--split", type=str, default="test", help="Manifest split to evaluate (default: test)")
+    parser.add_argument("--cache-dir", type=str, default="..\\work\\evaluation_face_cache",
+                        help="Disk cache for preprocessed face crops shared across evaluation runs")
+    parser.add_argument("--frames", type=int, default=20, help="Uniformly sampled frames per video")
+    parser.add_argument("--variant", choices=["all", "baseline", "spec_fusion", "temporal_only", "dct_only", "attention_rich", "gated_rich", "attention_bands"], default="all",
+                        help="Evaluate all comparison paths, or one path to avoid repeated backbone inference")
     parser.add_argument(
         "--demo-samples",
         type=int,
@@ -103,22 +110,27 @@ def format_markdown_table(results: Mapping[str, Dict[str, object]]) -> str:
     }
 
     lines = [
-        "| Model | Accuracy | Precision | Recall | F1 | Notes |",
-        "|---|---:|---:|---:|---:|---|",
+        "| Model | Accuracy | FAKE precision | FAKE recall | Macro F1 | Coverage | Notes |",
+        "|---|---:|---:|---:|---:|---:|---|",
     ]
     for model_name, metrics in results.items():
         acc = f"{metrics['accuracy']:.4f}"
-        prec = f"{metrics['precision']:.4f}"
-        rec = f"{metrics['recall']:.4f}"
-        f1 = f"{metrics['f1']:.4f}"
+        prec = f"{metrics['fake_precision']:.4f}"
+        rec = f"{metrics['fake_recall']:.4f}"
+        f1 = f"{metrics['macro_f1']:.4f}"
+        coverage = f"{metrics.get('coverage', 1.0):.4f}"
         notes = notes_map.get(model_name, "")
-        lines.append(f"| {model_name} | {acc} | {prec} | {rec} | {f1} | {notes} |")
+        lines.append(f"| {model_name} | {acc} | {prec} | {rec} | {f1} | {coverage} | {notes} |")
 
     return "\n".join(lines)
 
 
 def main() -> None:
     args = parse_args()
+    if not args.demo and not args.checkpoint:
+        raise SystemExit("No checkpoint is included. Pass the original checkpoint with --checkpoint.")
+    if not args.demo and args.batch_size != 1:
+        raise SystemExit("Evaluation uses batch size 1 because usable face-frame counts vary by video.")
     device = args.device or str(get_default_device())
 
     print("=" * 70)
@@ -133,10 +145,12 @@ def main() -> None:
         dataset = SyntheticEvaluationDataset(num_samples=args.demo_samples)
     elif args.data_dir:
         print(f"Dataset Mode:     Directory ({args.data_dir})")
-        dataset = VideoEvaluationDataset.from_directory(args.data_dir)
+        dataset = VideoEvaluationDataset.from_directory(args.data_dir, num_frames=args.frames)
     else:
         print(f"Dataset Mode:     CSV Manifest ({args.csv})")
-        dataset = VideoEvaluationDataset.from_csv(args.csv)
+        dataset = VideoEvaluationDataset.from_csv(args.csv, num_frames=args.frames,
+                                                  base_dir=args.data_root, split=args.split,
+                                                  disk_cache_dir=args.cache_dir)
 
     print(f"Total Samples:    {len(dataset)}")
     dataloader = create_evaluation_dataloader(dataset, batch_size=args.batch_size)
@@ -146,7 +160,31 @@ def main() -> None:
     model = load_model(checkpoint_path=args.checkpoint, device=device)
 
     print("\nRunning comparative evaluation across 3 variants...")
-    results = compare_model_variants(model, dataloader, device=torch.device(device))
+    if args.variant == "all":
+        results = compare_model_variants(model, dataloader, device=torch.device(device))
+    elif args.variant == "baseline":
+        results = {"Original ResNeXt-50 + LSTM": evaluate_model(model, dataloader, device=torch.device(device))}
+    elif args.variant == "spec_fusion":
+        if getattr(model, "inference_variant", "baseline") != "spec_fusion":
+            raise SystemExit("--variant spec_fusion requires a checkpoint trained with the specification fusion head")
+        results = {"Trained specification fusion": evaluate_model(
+            model, dataloader, device=torch.device(device), use_fusion_classifier=True)}
+    elif args.variant in {"attention_rich", "gated_rich", "attention_bands"}:
+        if getattr(model, "inference_variant", "baseline") != args.variant:
+            raise SystemExit(f"--variant {args.variant} requires a checkpoint trained with that head")
+        results = {f"Trained {args.variant}": evaluate_model(
+            model, dataloader, device=torch.device(device), use_advanced_classifier=True)}
+    elif args.variant in {"temporal_only", "dct_only"}:
+        if getattr(model, "inference_variant", "baseline") != args.variant:
+            raise SystemExit(f"--variant {args.variant} requires a checkpoint trained with that head")
+        results = {f"Trained {args.variant} head": evaluate_model(
+            model, dataloader, device=torch.device(device), use_fusion_classifier=True)}
+    for variant, result in results.items():
+        if args.checkpoint:
+            result["checkpoint_size_bytes"] = os.path.getsize(args.checkpoint)
+            result["checkpoint_size_mb"] = round(os.path.getsize(args.checkpoint) / (1024 * 1024), 3)
+        for prediction in result.get("per_video", []):
+            prediction["model_variant"] = variant
 
     print("\n" + "=" * 70)
     print("                 SUBMISSION COMPARISON TABLE")
@@ -160,6 +198,8 @@ def main() -> None:
         cm = res["confusion_matrix"]
         print(f"  • {name}:")
         print(f"      TN: {cm[0][0]}, FP: {cm[0][1]}, FN: {cm[1][0]}, TP: {cm[1][1]}")
+        print(f"      Scored: {res['denominator']} / {res['total_videos']}; coverage: {res['coverage']:.4f}; rejected: {res['rejected_by_class']}")
+        print(f"      AUROC: {res['auroc']}; AP: {res['average_precision']}; mean model time: {res['mean_inference_seconds']} s/video (preprocessing excluded)")
 
     if args.output:
         os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)

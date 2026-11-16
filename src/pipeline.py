@@ -77,6 +77,7 @@ def load_model(
 
     logger.info("Initializing Model 2 architecture on device: %s", device)
     model = Model(num_classes=num_classes, use_frequency_feature=use_frequency_feature)
+    model.inference_variant = "untrained"
 
     if checkpoint_path is not None:
         if not os.path.isfile(checkpoint_path):
@@ -90,8 +91,14 @@ def load_model(
 
         if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
             state_dict = checkpoint["state_dict"]
+            model.inference_variant = checkpoint.get("variant", "baseline")
+            model.inference_temperature = float(checkpoint.get("temperature", 1.0))
+            if model.inference_variant in {"attention_rich", "gated_rich", "attention_bands"}:
+                model.enable_advanced_head(model.inference_variant)
         else:
             state_dict = checkpoint
+            model.inference_variant = "baseline"
+            model.inference_temperature = 1.0
 
         # strict=False allows loading checkpoint into model containing new fusion layers
         load_result = model.load_state_dict(state_dict, strict=False)
@@ -114,8 +121,9 @@ def predict_video(
     num_frames: int = 20,
     face_size: int = 112,
     min_detection_confidence: float = 0.3,
-    use_temporal_adjustment: bool = True,
-    use_frequency_adjustment: bool = True,
+    use_temporal_adjustment: bool = False,
+    use_frequency_adjustment: bool = False,
+    use_fusion_classifier: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """End-to-end inference on a single video file.
 
@@ -187,16 +195,44 @@ def predict_video(
         preprocess_res.num_fallback,
         num_frames,
     )
+    if preprocess_res.num_detected < 2:
+        return {
+            "video_path": os.path.abspath(video_path),
+            "status": "insufficient_evidence",
+            "reason": "Fewer than two sampled frames contained a detected face.",
+            "prediction": None,
+            "confidence": None,
+            "probability": None,
+            "temporal_score": None,
+            "frequency_score": None,
+            "preprocessing": {
+                "frames_processed": num_frames,
+                "usable_frames": preprocess_res.num_detected,
+                "faces_detected": preprocess_res.num_detected,
+                "fallbacks_used": preprocess_res.num_fallback,
+            },
+        }
+    valid_mask = preprocess_res.valid_mask
+    if valid_mask is None:
+        valid_mask = torch.zeros(preprocess_res.tensor.shape[0], dtype=torch.bool)
+        valid_mask[:preprocess_res.num_detected] = True
+    usable_frames = preprocess_res.tensor[valid_mask]
+    if use_fusion_classifier is None:
+        use_fusion_classifier = getattr(model, "inference_variant", "baseline") in {"spec_fusion", "temporal_only", "dct_only"}
+    use_advanced_classifier = getattr(model, "inference_variant", "baseline") in {"attention_rich", "gated_rich", "attention_bands"}
     diagnostics = predict_with_diagnostics(
         model=model,
-        frames=preprocess_res.tensor,
+        frames=usable_frames,
         device=device,
         use_temporal_adjustment=use_temporal_adjustment,
         use_frequency_adjustment=use_frequency_adjustment,
+        use_fusion_classifier=use_fusion_classifier,
+        use_advanced_classifier=use_advanced_classifier,
     )
 
     return {
         "video_path": os.path.abspath(video_path),
+        "status": "ok",
         "prediction": diagnostics["prediction"],
         "confidence": diagnostics["confidence"],
         "probability": diagnostics["probability"],
@@ -205,6 +241,7 @@ def predict_video(
         "preprocessing": {
             "frames_processed": num_frames,
             "faces_detected": preprocess_res.num_detected,
+            "usable_frames": preprocess_res.num_detected,
             "fallbacks_used": preprocess_res.num_fallback,
         },
     }
@@ -218,8 +255,8 @@ def predict_batch(
     num_frames: int = 20,
     face_size: int = 112,
     min_detection_confidence: float = 0.3,
-    use_temporal_adjustment: bool = True,
-    use_frequency_adjustment: bool = True,
+    use_temporal_adjustment: bool = False,
+    use_frequency_adjustment: bool = False,
 ) -> List[Dict[str, Any]]:
     """Run end-to-end prediction across multiple video files.
 
@@ -266,6 +303,7 @@ def predict_batch(
             results.append({
                 "video_path": os.path.abspath(path),
                 "error": str(e),
+                "status": "error",
                 "prediction": None,
                 "confidence": None,
             })
