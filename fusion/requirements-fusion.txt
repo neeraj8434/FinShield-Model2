@@ -1,0 +1,23 @@
+# Core (already installed)
+torch>=2.0
+torchvision>=0.15
+timm>=0.9
+Pillow>=9.0
+numpy>=1.24
+scikit-learn>=1.2
+scipy>=1.10
+opencv-python>=4.8
+flask>=3.0
+flask-cors>=4.0
+
+# OCR (install for real inference; demo mode works without it)
+easyocr>=1.7
+
+# Face analysis (optional, for soft age/gender checks)
+deepface>=0.0.80
+
+# Video preprocessing (Model 2 needs this)
+mediapipe>=0.10
+
+# Plotting (evaluation only)
+matplotlib>=3.7

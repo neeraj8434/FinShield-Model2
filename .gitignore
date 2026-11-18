@@ -50,3 +50,20 @@ build/
 !.env.example
 models/*.tflite
 
+# ONNX models (large)
+models/*.onnx
+
+# Archives
+*.zip
+
+# Runtime data
+fusion/uploads/
+fusion/history/
+
+# Node
+node_modules/
+
+# Windows
+Thumbs.db
+desktop.ini
+refrence doc/

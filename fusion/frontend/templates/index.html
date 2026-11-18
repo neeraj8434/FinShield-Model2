@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinShield — KYC Verification Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+  <!-- Toast -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- ── Navbar ───────────────────────────────────────────── -->
+  <nav class="navbar">
+    <a href="#" class="nav-brand">
+      <svg viewBox="0 0 32 32" fill="none"><path d="M16 2L4 8v8c0 7.73 5.12 14.95 12 16 6.88-1.05 12-8.27 12-16V8L16 2z" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 16l3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      FinShield
+    </a>
+    <ul class="nav-links">
+      <li><a href="#about">Technology</a></li>
+      <li><a href="#verify">Verify</a></li>
+    </ul>
+    <button id="history-toggle" class="nav-history-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      History
+      <span id="history-count" class="count-badge" style="display:none">0</span>
+    </button>
+  </nav>
+
+  <!-- ── Hero ────────────────────────────────────────────── -->
+  <section class="hero" id="hero">
+    <canvas id="hero-canvas"></canvas>
+    <div class="hero-inner">
+      <div class="hero-text">
+        <div class="hero-eyebrow">AI-Powered Identity Verification</div>
+        <h1 class="hero-title">Trust Every<br>Identity.<br><span class="accent">Detect Every Fraud.</span></h1>
+        <p class="hero-quote">
+          "In a world of deepfakes and digital forgeries, multimodal AI fusion is the
+          last line of defence between authentic identities and sophisticated fraud."
+        </p>
+        <a href="#verify" class="hero-cta">
+          Start Verification
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+      <div class="hero-visual">
+        <canvas id="face-scan-canvas"></canvas>
+        <div class="scan-label">Real-time biometric analysis</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Stats / Numbers ─────────────────────────────────── -->
+  <section class="dark-section" id="about">
+    <div class="section-inner">
+      <div class="reveal">
+        <div class="section-label">Training Data</div>
+        <h2 class="section-title">Trained on Large-Scale Identity Data</h2>
+        <p class="section-desc">
+          Our models are trained on identity-aware, non-leaking splits of Aadhaar and PAN card
+          datasets alongside video sequences, with rigorous face-group isolation.
+        </p>
+      </div>
+      <div class="stats-row reveal">
+        <div class="stat-box">
+          <div class="stat-num">10,000+</div>
+          <div class="stat-unit">Documents and videos</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">8,000+</div>
+          <div class="stat-unit">Identity document images</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">2,000+</div>
+          <div class="stat-unit">Video sequences</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">4</div>
+          <div class="stat-unit">Independent modalities</div>
+        </div>
+      </div>
+
+      <!-- ── Model Cards ─────────────────────────────────── -->
+      <div class="reveal">
+        <div class="section-label">Architecture</div>
+        <h2 class="section-title">How FinShield Works</h2>
+        <p class="section-desc">
+          Four independent analysis streams fused through reliability-weighted noisy-OR aggregation.
+        </p>
+      </div>
+      <div class="models-grid reveal">
+        <div class="model-card">
+          <div class="model-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <h3>Document Forgery Detection</h3>
+          <p>Dual-branch EfficientNet-B0 spatial + DCT frequency-domain CNN. Detects pixel-level tampering, splicing, and digital forgery artifacts.</p>
+          <div class="model-stats">
+            <span class="model-stat">97.92% Acc</span>
+            <span class="model-stat">224x224 input</span>
+            <span class="model-stat">1,088 samples</span>
+          </div>
+        </div>
+        <div class="model-card">
+          <div class="model-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          </div>
+          <h3>Video Deepfake Analysis</h3>
+          <p>ResNeXt-50 frame encoder + LSTM temporal modelling with gated rich attention. TTA horizontal flip + tuned threshold.</p>
+          <div class="model-stats">
+            <span class="model-stat">~80% Acc</span>
+            <span class="model-stat">32 frames</span>
+            <span class="model-stat">112x112 faces</span>
+          </div>
+        </div>
+        <div class="model-card">
+          <div class="model-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <h3>Biometric Face Match</h3>
+          <p>YuNet face detection + SFace recognition. Cosine similarity between document face and video selfie for identity confirmation.</p>
+          <div class="model-stats">
+            <span class="model-stat">0.363 threshold</span>
+            <span class="model-stat">128-d embedding</span>
+          </div>
+        </div>
+      </div>
+      <div class="fusion-card reveal">
+        <div class="model-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px;color:var(--cream-100)">Reliability-Weighted Fusion Engine</h3>
+          <p style="font-size:.88rem;color:var(--text-secondary);line-height:1.65">
+            Per-modality probabilities are adjusted by reliability weights (p' = 0.5 + r*(p - 0.5)),
+            then combined via noisy-OR: risk = 1 - product(1 - p'). Hard vetoes override fusion: face mismatch
+            triggers rejection, insufficient evidence escalates to review. Thresholds: Approve &lt;35%, Review 35-65%, Reject &gt;65%.
+          </p>
+          <div class="model-stats" style="margin-top:16px">
+            <span class="model-stat"><span class="model-stat-label">Approve</span> &lt;35%</span>
+            <span class="model-stat"><span class="model-stat-label">Review</span> 35-65%</span>
+            <span class="model-stat"><span class="model-stat-label">Reject</span> &gt;65%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Verification Form ───────────────────────────────── -->
+  <section class="dark-section-alt" id="verify">
+    <div class="verify-inner">
+      <div class="reveal">
+        <div class="section-label">Identity Verification</div>
+        <h2 class="section-title">Submit KYC Documents</h2>
+        <p class="section-desc">Upload your identity document and a live video selfie for multi-factor verification.</p>
+      </div>
+      <form id="kyc-form" enctype="multipart/form-data">
+        <div class="form-card reveal">
+          <div class="form-card-title"><span class="num">1</span> Personal Information</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="form_name">Full Name (as on document)</label>
+              <input type="text" id="form_name" class="form-input" placeholder="Enter full name" autocomplete="name">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="form_dob">Date of Birth</label>
+              <input type="date" id="form_dob" class="form-input">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="doc_type">Document Type</label>
+              <select id="doc_type" class="form-input form-select">
+                <option value="aadhaar">Aadhaar Card</option>
+                <option value="pan">PAN Card</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="form_id_number">Document Number</label>
+              <input type="text" id="form_id_number" class="form-input input-formatted" placeholder="0000 0000 0000">
+              <div class="form-hint" id="id-hint">12-digit Aadhaar number</div>
+            </div>
+          </div>
+        </div>
+        <div class="form-card reveal">
+          <div class="form-card-title"><span class="num">2</span> Upload Documents</div>
+          <div class="upload-grid">
+            <div class="upload-zone">
+              <input type="file" id="doc_image" accept="image/*">
+              <div class="upload-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              </div>
+              <div class="upload-title">Identity Document</div>
+              <div class="upload-hint">Aadhaar or PAN card image (JPG, PNG)</div>
+              <div class="upload-filename"></div>
+              <img class="upload-preview" alt="">
+            </div>
+            <div class="upload-zone">
+              <input type="file" id="video" accept="video/*">
+              <div class="upload-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+              </div>
+              <div class="upload-title">Video Selfie</div>
+              <div class="upload-hint">Short face video for liveness check (MP4, AVI)</div>
+              <div class="upload-filename"></div>
+            </div>
+          </div>
+        </div>
+        <button type="submit" id="submit-btn" class="submit-btn">
+          <span class="btn-label">Run Verification</span>
+          <div class="spinner"></div>
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ── Results ─────────────────────────────────────────── -->
+  <section id="results-section">
+    <div class="section-label">Analysis Complete</div>
+    <h2 class="section-title">Verification Results</h2>
+    <div id="decision-banner" class="decision-banner REVIEW">
+      <div id="decision-label" class="decision-label">VERIFICATION RESULT</div>
+      <div id="decision-verdict" class="decision-verdict">PROCESSING</div>
+      <div class="risk-gauge">
+        <span class="risk-gauge-label">Fused Risk Score</span>
+        <div class="risk-gauge-bar"><div id="risk-fill" class="risk-gauge-fill low" style="width:0%"></div></div>
+        <span id="risk-value" class="risk-gauge-value">0%</span>
+      </div>
+    </div>
+    <div class="result-card">
+      <div class="result-card-title">Modality Analysis</div>
+      <div class="modality-grid">
+        <div class="modality-item" id="mod-doc"><div class="modality-label">Document Forgery</div><div class="modality-verdict verdict-na">--</div><div class="modality-meta"></div></div>
+        <div class="modality-item" id="mod-video"><div class="modality-label">Video Deepfake</div><div class="modality-verdict verdict-na">--</div><div class="modality-meta"></div></div>
+        <div class="modality-item" id="mod-semantic"><div class="modality-label">Semantic Checks</div><div class="modality-verdict verdict-na">--</div><div class="modality-meta"></div></div>
+        <div class="modality-item" id="mod-face"><div class="modality-label">Face Match</div><div class="modality-verdict verdict-na">--</div><div class="modality-meta"></div></div>
+      </div>
+    </div>
+    <div class="result-card"><div class="result-card-title">Fusion Weights</div><div id="weights-container"></div></div>
+    <div class="result-card"><div class="result-card-title">Semantic Validation Details</div><div id="checks-container"></div></div>
+    <div class="result-card"><div class="result-card-title">Biometric Face Match</div><div id="face-container"></div></div>
+    <div class="result-card" style="display:none"><div class="result-card-title">Reason Codes</div><div id="reason-container"></div></div>
+    <div class="result-card" style="display:none"><div class="result-card-title">Explainability Heatmap</div><div id="xai-container"></div></div>
+  </section>
+
+  <!-- ── History Sidebar ─────────────────────────────────── -->
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+  <aside id="history-sidebar" class="history-sidebar">
+    <div class="sidebar-header"><h2>Verification History</h2><button id="sidebar-close" class="sidebar-close">&times;</button></div>
+    <div class="sidebar-actions"><span class="sidebar-count" id="sidebar-count-label"></span><button id="sidebar-clear" class="sidebar-clear">Clear All</button></div>
+    <div class="sidebar-body" id="sidebar-body"></div>
+  </aside>
+
+  <footer class="site-footer">FinShield Multimodal KYC Verification System &mdash; Research Demonstration</footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

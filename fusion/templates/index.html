@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinShield KYC Verification</title>
+<style>
+:root {
+  --bg: #f5f7fa;
+  --card: #ffffff;
+  --text: #1a1a2e;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --success: #059669;
+  --success-bg: #d1fae5;
+  --warn: #d97706;
+  --warn-bg: #fef3c7;
+  --danger: #dc2626;
+  --danger-bg: #fee2e2;
+  --border: #e5e7eb;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --sidebar-w: 340px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #3b82f6;
+    --accent-light: #1e3a5f;
+    --success: #34d399;
+    --success-bg: #064e3b;
+    --warn: #fbbf24;
+    --warn-bg: #78350f;
+    --danger: #f87171;
+    --danger-bg: #7f1d1d;
+    --border: #334155;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ── Layout ──────────────────────────────────────────────── */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+.main-content {
+  flex: 1;
+  padding: 16px;
+  transition: margin-right 0.3s ease;
+  min-width: 0;
+}
+.main-content.sidebar-open {
+  margin-right: var(--sidebar-w);
+}
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ── History Sidebar ─────────────────────────────────────── */
+.history-sidebar {
+  position: fixed;
+  top: 0;
+  right: calc(-1 * var(--sidebar-w));
+  width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--card);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 20px rgba(0,0,0,0.08);
+  transition: right 0.3s ease;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.history-sidebar.open {
+  right: 0;
+}
+.sidebar-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.sidebar-header h2 {
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sidebar-header .close-btn {
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.sidebar-header .close-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+.sidebar-actions {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+.sidebar-actions .count {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.sidebar-actions .clear-btn {
+  font-size: 0.8rem;
+  color: var(--danger);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.sidebar-actions .clear-btn:hover {
+  background: var(--danger-bg);
+}
+.sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+.sidebar-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ── History Card ────────────────────────────────────────── */
+.history-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+.history-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(37,99,235,0.1);
+}
+.history-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+.hc-top {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.hc-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--border);
+}
+.hc-info {
+  flex: 1;
+  min-width: 0;
+}
+.hc-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hc-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.hc-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  margin-top: 4px;
+}
+.hc-badge-APPROVE { background: var(--success-bg); color: var(--success); }
+.hc-badge-REVIEW  { background: var(--warn-bg);    color: var(--warn);    }
+.hc-badge-REJECT  { background: var(--danger-bg);  color: var(--danger);  }
+.hc-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.hc-risk {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.hc-risk-bar {
+  display: inline-block;
+  width: 50px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  vertical-align: middle;
+  margin-left: 4px;
+  overflow: hidden;
+}
+.hc-risk-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+.hc-delete {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  transition: color 0.15s, background 0.15s;
+}
+.hc-delete:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+/* ── History Toggle Button ───────────────────────────────── */
+.history-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 90;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 10px rgba(37,99,235,0.3);
+  transition: background 0.15s, transform 0.1s;
+}
+.history-toggle:hover { background: #1d4ed8; }
+.history-toggle:active { transform: scale(0.97); }
+.history-toggle .badge-count {
+  background: rgba(255,255,255,0.25);
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  min-width: 20px;
+  text-align: center;
+}
+.history-toggle.sidebar-open {
+  right: calc(var(--sidebar-w) + 16px);
+}
+
+/* ── Original styles ─────────────────────────────────────── */
+header {
+  text-align: center;
+  padding: 24px 0 16px;
+}
+header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+header h1 span { color: var(--accent); }
+header p { color: var(--muted); font-size: 0.95rem; margin-top: 4px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.card h2 {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+input, select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: var(--bg);
+  color: var(--text);
+  transition: border 0.2s;
+}
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 32px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.upload-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.upload-zone .icon { font-size: 2rem; margin-bottom: 8px; }
+.upload-zone .label { font-weight: 600; }
+.upload-zone .hint { font-size: 0.8rem; color: var(--muted); }
+.upload-zone .file-name {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--accent);
+  font-weight: 600;
+  word-break: break-all;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 32px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  width: 100%;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: #1d4ed8; }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+.spinner {
+  display: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn.loading .spinner { display: inline-block; }
+.btn.loading .btn-text { display: none; }
+
+/* Result area */
+#result { display: none; }
+.decision-badge {
+  display: inline-block;
+  padding: 8px 24px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: 0.03em;
+}
+.decision-APPROVE { background: var(--success-bg); color: var(--success); }
+.decision-REVIEW  { background: var(--warn-bg);    color: var(--warn);    }
+.decision-REJECT  { background: var(--danger-bg);  color: var(--danger);  }
+
+.risk-bar-container { margin: 16px 0; }
+.risk-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--border);
+  overflow: hidden;
+}
+.risk-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.6s ease;
+}
+.risk-low    { background: var(--success); }
+.risk-medium { background: var(--warn);    }
+.risk-high   { background: var(--danger);  }
+
+.modality-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+@media (max-width: 600px) { .modality-grid { grid-template-columns: 1fr; } }
+.modality-card {
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.modality-card h4 { font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+.modality-card .verdict { font-size: 1.1rem; font-weight: 700; }
+.modality-card .meta { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+
+.checks-list { list-style: none; margin-top: 8px; }
+.checks-list li {
+  padding: 6px 0;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.checks-list li:last-child { border-bottom: none; }
+.check-icon { flex-shrink: 0; font-size: 1rem; }
+.check-pass { color: var(--success); }
+.check-fail { color: var(--danger); }
+.check-warn { color: var(--warn); }
+.check-unknown { color: var(--muted); }
+
+.reasons-list { list-style: disc; padding-left: 20px; margin-top: 8px; }
+.reasons-list li { font-size: 0.9rem; padding: 3px 0; color: var(--muted); }
+
+.xai-section { margin-top: 12px; text-align: center; }
+.xai-section img {
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.error-msg {
+  color: var(--danger);
+  font-weight: 600;
+  padding: 16px;
+  text-align: center;
+}
+
+/* ── Mobile sidebar ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  :root { --sidebar-w: 100vw; }
+  .main-content.sidebar-open { margin-right: 0; }
+  .history-toggle.sidebar-open { right: 16px; z-index: 101; }
+  .history-sidebar { box-shadow: -4px 0 30px rgba(0,0,0,0.3); }
+}
+</style>
+</head>
+<body>
+
+<!-- History toggle button -->
+<button class="history-toggle" id="history-toggle" onclick="toggleSidebar()">
+  <span>History</span>
+  <span class="badge-count" id="history-count">0</span>
+</button>
+
+<!-- History Sidebar -->
+<div class="history-sidebar" id="history-sidebar">
+  <div class="sidebar-header">
+    <h2>Verification History</h2>
+    <button class="close-btn" onclick="toggleSidebar()" title="Close">&times;</button>
+  </div>
+  <div class="sidebar-actions">
+    <span class="count" id="sidebar-count">0 entries</span>
+    <button class="clear-btn" id="clear-all-btn" onclick="clearHistory()">Clear All</button>
+  </div>
+  <div class="sidebar-body" id="sidebar-body">
+    <div class="sidebar-empty" id="sidebar-empty">
+      No verification history yet.<br>Submit a KYC check to see results here.
+    </div>
+  </div>
+</div>
+
+<div class="app-layout">
+<div class="main-content" id="main-content">
+<div class="container">
+
+<header>
+  <h1>FinShield KYC Verification</h1>
+  <p>Multimodal Document &amp; Deepfake Fraud Detection</p>
+</header>
+
+<!-- KYC Form -->
+<form id="kyc-form" enctype="multipart/form-data">
+  <div class="card">
+    <h2>Applicant Details</h2>
+    <div class="form-row">
+      <div>
+        <label for="form_name">Full Name (as on document)</label>
+        <input type="text" id="form_name" name="form_name" placeholder="e.g. Rajesh Kumar">
+      </div>
+      <div>
+        <label for="doc_type">Document Type</label>
+        <select id="doc_type" name="doc_type">
+          <option value="aadhaar">Aadhaar Card</option>
+          <option value="pan">PAN Card</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label for="form_id_number">ID Number</label>
+        <input type="text" id="form_id_number" name="form_id_number" placeholder="e.g. 1234 5678 9012">
+      </div>
+      <div>
+        <label for="form_dob">Date of Birth (DD/MM/YYYY)</label>
+        <input type="text" id="form_dob" name="form_dob" placeholder="e.g. 15/08/1995">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Upload Documents</h2>
+    <div class="form-row">
+      <div class="upload-zone" id="doc-zone">
+        <div class="icon">ID</div>
+        <div class="label">ID Document Image</div>
+        <div class="hint">Aadhaar or PAN card (JPG, PNG)</div>
+        <div class="file-name" id="doc-filename"></div>
+        <input type="file" name="doc_image" id="doc_image" accept="image/*">
+      </div>
+      <div class="upload-zone" id="vid-zone">
+        <div class="icon">Video</div>
+        <div class="label">Selfie / Liveness Video</div>
+        <div class="hint">Short video of the applicant (MP4, AVI)</div>
+        <div class="file-name" id="vid-filename"></div>
+        <input type="file" name="video" id="video" accept="video/*">
+      </div>
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary" id="submit-btn">
+    <span class="btn-text">Verify Identity</span>
+    <span class="spinner"></span>
+  </button>
+</form>
+
+<!-- Results -->
+<div id="result">
+  <div class="card" id="decision-card">
+    <div style="text-align:center; margin-bottom: 12px;">
+      <span class="decision-badge" id="decision-badge"></span>
+    </div>
+    <div class="risk-bar-container">
+      <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--muted); margin-bottom:4px;">
+        <span>Low Risk</span>
+        <span id="risk-label">0%</span>
+        <span>High Risk</span>
+      </div>
+      <div class="risk-bar"><div class="risk-bar-fill" id="risk-fill"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Modality Analysis</h2>
+    <div class="modality-grid" id="modality-grid"></div>
+  </div>
+
+  <div class="card" id="semantic-card" style="display:none">
+    <h2>Semantic Validation</h2>
+    <ul class="checks-list" id="semantic-checks"></ul>
+  </div>
+
+  <div class="card" id="face-card" style="display:none">
+    <h2>Face Match</h2>
+    <div id="face-result"></div>
+  </div>
+
+  <div class="card" id="reasons-card">
+    <h2>Reason Codes</h2>
+    <ul class="reasons-list" id="reasons-list"></ul>
+  </div>
+
+  <div class="card" id="xai-card" style="display:none">
+    <h2>Explainability (Grad-CAM++)</h2>
+    <div class="xai-section" id="xai-section"></div>
+  </div>
+</div>
+
+<div class="error-msg" id="error-msg" style="display:none"></div>
+
+</div>
+</div>
+</div>
+
+<script>
+/* ── Sidebar toggle ──────────────────────────────────────── */
+let sidebarOpen = false;
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  document.getElementById('history-sidebar').classList.toggle('open', sidebarOpen);
+  document.getElementById('main-content').classList.toggle('sidebar-open', sidebarOpen);
+  document.getElementById('history-toggle').classList.toggle('sidebar-open', sidebarOpen);
+  if (sidebarOpen) loadHistory();
+}
+
+/* ── History rendering ───────────────────────────────────── */
+let currentActiveId = null;
+
+function formatTime(ts) {
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  const diff = (now - d) / 1000;
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    + ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function riskColor(risk) {
+  if (risk < 0.35) return 'var(--success)';
+  if (risk < 0.65) return 'var(--warn)';
+  return 'var(--danger)';
+}
+
+function renderHistoryCard(entry) {
+  const riskPct = Math.round(entry.fused_risk * 100);
+  const thumbHtml = entry.thumbnail
+    ? `<img class="hc-thumb" src="${entry.thumbnail}" alt="doc">`
+    : `<div class="hc-thumb" style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--muted)">N/A</div>`;
+
+  return `<div class="history-card ${entry.id === currentActiveId ? 'active' : ''}"
+    data-id="${entry.id}" onclick="loadHistoryEntry('${entry.id}')">
+    <div class="hc-top">
+      ${thumbHtml}
+      <div class="hc-info">
+        <div class="hc-name">${entry.form_name || 'Unknown'}</div>
+        <div class="hc-meta">${(entry.doc_type || 'aadhaar').toUpperCase()} &middot; ${formatTime(entry.timestamp)}</div>
+        <span class="hc-badge hc-badge-${entry.decision}">${entry.decision}</span>
+      </div>
+    </div>
+    <div class="hc-bottom">
+      <span class="hc-risk">Risk: ${riskPct}%
+        <span class="hc-risk-bar"><span class="hc-risk-fill" style="width:${riskPct}%;background:${riskColor(entry.fused_risk)}"></span></span>
+      </span>
+      <button class="hc-delete" onclick="event.stopPropagation(); deleteEntry('${entry.id}')" title="Delete">&#x1f5d1;</button>
+    </div>
+  </div>`;
+}
+
+async function loadHistory() {
+  try {
+    const resp = await fetch('/api/history');
+    const entries = await resp.json();
+    const body = document.getElementById('sidebar-body');
+    const empty = document.getElementById('sidebar-empty');
+    const countEl = document.getElementById('sidebar-count');
+    const badgeEl = document.getElementById('history-count');
+
+    badgeEl.textContent = entries.length;
+    countEl.textContent = entries.length + ' entr' + (entries.length === 1 ? 'y' : 'ies');
+
+    if (entries.length === 0) {
+      body.innerHTML = '';
+      body.appendChild(empty);
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    body.innerHTML = entries.map(renderHistoryCard).join('');
+  } catch (err) {
+    console.error('Failed to load history:', err);
+  }
+}
+
+async function loadHistoryEntry(id) {
+  currentActiveId = id;
+  // Highlight active card
+  document.querySelectorAll('.history-card').forEach(c => c.classList.toggle('active', c.dataset.id === id));
+
+  try {
+    const resp = await fetch('/api/history/' + id);
+    if (!resp.ok) return;
+    const entry = await resp.json();
+    if (entry.result) {
+      renderResult(entry.result);
+      document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  } catch (err) {
+    console.error('Failed to load entry:', err);
+  }
+}
+
+async function deleteEntry(id) {
+  if (!confirm('Delete this verification record?')) return;
+  try {
+    await fetch('/api/history/' + id, { method: 'DELETE' });
+    if (id === currentActiveId) {
+      currentActiveId = null;
+      document.getElementById('result').style.display = 'none';
+    }
+    loadHistory();
+  } catch (err) {
+    console.error('Failed to delete:', err);
+  }
+}
+
+async function clearHistory() {
+  if (!confirm('Delete ALL verification history?')) return;
+  try {
+    await fetch('/api/history', { method: 'DELETE' });
+    currentActiveId = null;
+    document.getElementById('result').style.display = 'none';
+    loadHistory();
+  } catch (err) {
+    console.error('Failed to clear:', err);
+  }
+}
+
+/* ── Upload zone labels ──────────────────────────────────── */
+document.querySelectorAll('.upload-zone input[type="file"]').forEach(input => {
+  input.addEventListener('change', () => {
+    const zone = input.closest('.upload-zone');
+    const nameEl = zone.querySelector('.file-name');
+    nameEl.textContent = input.files.length ? input.files[0].name : '';
+  });
+  const zone = input.closest('.upload-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', () => zone.classList.remove('dragover'));
+});
+
+/* ── Form submit ─────────────────────────────────────────── */
+const form = document.getElementById('kyc-form');
+const btn = document.getElementById('submit-btn');
+const resultDiv = document.getElementById('result');
+const errorDiv = document.getElementById('error-msg');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  resultDiv.style.display = 'none';
+  errorDiv.style.display = 'none';
+
+  const docFile = document.getElementById('doc_image').files[0];
+  const vidFile = document.getElementById('video').files[0];
+  if (!docFile || !vidFile) {
+    errorDiv.textContent = 'Please upload both a document image and a selfie video.';
+    errorDiv.style.display = 'block';
+    return;
+  }
+
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  const fd = new FormData(form);
+
+  try {
+    const resp = await fetch('/api/predict', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    renderResult(data);
+    // Refresh history sidebar
+    if (data.history_id) currentActiveId = data.history_id;
+    loadHistory();
+    // Auto-open sidebar on first result
+    if (!sidebarOpen) toggleSidebar();
+  } catch (err) {
+    errorDiv.textContent = err.message;
+    errorDiv.style.display = 'block';
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+});
+
+/* ── Render result ───────────────────────────────────────── */
+function renderResult(d) {
+  resultDiv.style.display = 'block';
+
+  // Decision badge
+  const badge = document.getElementById('decision-badge');
+  badge.textContent = d.decision;
+  badge.className = 'decision-badge decision-' + d.decision;
+
+  // Risk bar
+  const pct = Math.round(d.fused_risk * 100);
+  document.getElementById('risk-label').textContent = pct + '%';
+  const fill = document.getElementById('risk-fill');
+  fill.style.width = pct + '%';
+  fill.className = 'risk-bar-fill ' + (pct < 35 ? 'risk-low' : pct < 65 ? 'risk-medium' : 'risk-high');
+
+  // Modality cards
+  const grid = document.getElementById('modality-grid');
+  grid.innerHTML = '';
+  if (d.document) {
+    grid.innerHTML += modalityCard('Document Forgery', d.document.verdict,
+      `Confidence: ${(d.document.confidence*100).toFixed(1)}%`,
+      `Reliability: ${(d.document.reliability*100).toFixed(0)}% &middot; Risk: ${d.document.risk_level}`);
+  }
+  if (d.video) {
+    const vLabel = d.video.status === 'ok' ? d.video.prediction : 'N/A';
+    const vConf = d.video.confidence ? `Confidence: ${(d.video.confidence*100).toFixed(1)}%` : d.video.status;
+    const vMeta = d.video.status === 'ok'
+      ? `Reliability: ${(d.video.reliability*100).toFixed(0)}% &middot; Frames: ${d.video.usable_frames}/${d.video.total_frames}`
+      : (d.video.detail || 'Insufficient evidence');
+    grid.innerHTML += modalityCard('Deepfake Detection', vLabel, vConf, vMeta);
+  }
+  // Weights
+  if (d.modality_scores && d.modality_scores.length) {
+    let wtHtml = '<div class="modality-card" style="grid-column:1/-1"><h4>Fusion Weights</h4>';
+    d.modality_scores.forEach(ms => {
+      wtHtml += `<div style="display:flex;justify-content:space-between;font-size:0.9rem;padding:3px 0">
+        <span>${ms.name}</span>
+        <span>Weight: ${(ms.weight*100).toFixed(1)}% &middot; Cal. P(fake): ${(ms.calibrated_prob*100).toFixed(1)}%</span>
+      </div>`;
+    });
+    wtHtml += '</div>';
+    grid.innerHTML += wtHtml;
+  }
+
+  // Semantic
+  const semCard = document.getElementById('semantic-card');
+  if (d.semantic && d.semantic.checks && d.semantic.checks.length) {
+    semCard.style.display = 'block';
+    const ul = document.getElementById('semantic-checks');
+    ul.innerHTML = '';
+    d.semantic.checks.forEach(c => {
+      const icon = c.status === 'pass' ? 'PASS' : c.status === 'fail' ? 'FAIL' : c.status === 'warn' ? 'WARN' : '?';
+      const cls = 'check-' + c.status;
+      ul.innerHTML += `<li><span class="check-icon ${cls}">${icon}</span><span><b>${c.field}</b>: ${c.detail}</span></li>`;
+    });
+  } else {
+    semCard.style.display = 'none';
+  }
+
+  // Face match
+  const fCard = document.getElementById('face-card');
+  if (d.face_match) {
+    fCard.style.display = 'block';
+    const fm = d.face_match;
+    const icon = fm.status === 'match' ? 'MATCH' : fm.status === 'mismatch' ? 'MISMATCH' : '?';
+    const cls = fm.status === 'match' ? 'check-pass' : fm.status === 'mismatch' ? 'check-fail' : 'check-unknown';
+    document.getElementById('face-result').innerHTML =
+      `<div style="font-size:1.1rem;font-weight:700" class="${cls}">${icon}</div>
+       <div style="font-size:0.9rem;color:var(--muted);margin-top:4px">${fm.detail}</div>`;
+  } else {
+    fCard.style.display = 'none';
+  }
+
+  // Reasons
+  const rList = document.getElementById('reasons-list');
+  rList.innerHTML = '';
+  (d.reason_codes || []).forEach(r => { rList.innerHTML += `<li>${r}</li>`; });
+
+  // XAI
+  const xaiCard = document.getElementById('xai-card');
+  if (d.document && d.document.xai_b64) {
+    xaiCard.style.display = 'block';
+    document.getElementById('xai-section').innerHTML =
+      `<img src="${d.document.xai_b64}" alt="Grad-CAM++ overlay">`;
+  } else {
+    xaiCard.style.display = 'none';
+  }
+
+  resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function modalityCard(title, verdict, conf, meta) {
+  const color = verdict === 'REAL' ? 'var(--success)' : verdict === 'FAKE' ? 'var(--danger)' : 'var(--warn)';
+  return `<div class="modality-card">
+    <h4>${title}</h4>
+    <div class="verdict" style="color:${color}">${verdict}</div>
+    <div class="meta">${conf}</div>
+    <div class="meta">${meta}</div>
+  </div>`;
+}
+
+/* ── Load history count on page load ─────────────────────── */
+(async function() {
+  try {
+    const resp = await fetch('/api/history');
+    const entries = await resp.json();
+    document.getElementById('history-count').textContent = entries.length;
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
