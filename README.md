@@ -212,5 +212,4 @@ python predict.py path/to/video.mp4 --checkpoint checkpoints/gated_rich.pt --jso
 - Neeraj Apraj (16010123212)
 - Shloka Pol (16010123316)
 
-**Guide:** Prof. Supriya Agrawal
-K. J. Somaiya College of Engineering — Department of Computer Engineering
+
